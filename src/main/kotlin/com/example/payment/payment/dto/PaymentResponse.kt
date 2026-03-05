@@ -16,6 +16,7 @@ data class PaymentResponse(
     val amount: BigDecimal,
     val status: PaymentStatus,
     val paymentMethod: PaymentMethod,
+    val cancelReason: String?,
     val createdAt: LocalDateTime,
 ) {
     companion object {
@@ -29,6 +30,7 @@ data class PaymentResponse(
             amount = payment.amount,
             status = payment.status,
             paymentMethod = payment.paymentMethod,
+            cancelReason = payment.cancelReason,
             createdAt = requireNotNull(payment.createdAt) { "@EnableJpaAuditing이 활성화되어 있어야 합니다." },
         )
     }

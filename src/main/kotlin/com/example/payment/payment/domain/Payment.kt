@@ -15,6 +15,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.annotation.LastModifiedDate
 import org.springframework.data.jpa.domain.support.AuditingEntityListener
@@ -77,6 +78,19 @@ class Payment(
     var createdAt: LocalDateTime? = null
         protected set
 
+    // 결제 취소 시 사유를 기록한다. 이력 관리와 고객 안내에 활용된다.
+    @Column(name = "cancel_reason")
+    var cancelReason: String? = null
+        protected set
+
+    /**
+     * 낙관적 락용 버전 필드.
+     * 동시 요청이 같은 결제의 상태를 동시에 변경하려 할 때 Lost Update를 방지한다.
+     */
+    @Version
+    var version: Long = 0
+        protected set
+
     @LastModifiedDate
     @Column(nullable = false)
     var updatedAt: LocalDateTime? = null
@@ -101,10 +115,11 @@ class Payment(
      * READY나 이미 CANCELLED인 상태에서 취소하려 하면 InvalidPaymentStatusException(409)을 던진다.
      * 재고 복원과 주문 상태 변경은 Service 레이어에서 같은 트랜잭션 내에서 처리한다.
      */
-    fun cancel() {
+    fun cancel(reason: String) {
         if (status != PaymentStatus.DONE) {
             throw InvalidPaymentStatusException()
         }
         status = PaymentStatus.CANCELLED
+        cancelReason = reason
     }
 }
