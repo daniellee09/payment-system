@@ -33,6 +33,6 @@ class ProductController(
         ApiResponse.success(productService.getProducts())
 
     @GetMapping("/{productId}")
-    fun getProduct(@PathVariable productId: Long): ApiResponse<ProductResponse> =
+    fun getProduct(@PathVariable productId: String): ApiResponse<ProductResponse> =
         ApiResponse.success(productService.getProduct(productId))
 }

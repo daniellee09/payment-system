@@ -10,9 +10,11 @@ import java.time.LocalDateTime
  * 엔티티를 직접 반환하지 않고 DTO로 변환하는 이유:
  * - 엔티티의 내부 구조(version, updatedAt 등)를 외부에 노출하지 않기 위해
  * - 응답 형식이 바뀌어도 엔티티 변경 없이 DTO만 수정하면 된다
+ *
+ * id(Long)가 아닌 productId(UUID)를 노출해 순차 탐색 공격을 방지한다.
  */
 data class ProductResponse(
-    val id: Long,
+    val productId: String,
     val name: String,
     val price: BigDecimal,
     val stock: Int,
@@ -20,9 +22,7 @@ data class ProductResponse(
 ) {
     companion object {
         fun from(product: Product): ProductResponse = ProductResponse(
-            // 저장 완료된 엔티티는 id와 createdAt이 반드시 존재한다.
-            // !! 대신 requireNotNull을 사용해 null인 경우 명확한 오류 메시지를 제공한다.
-            id = requireNotNull(product.id) { "저장된 상품의 id는 null일 수 없습니다." },
+            productId = product.productId,
             name = product.name,
             price = product.price,
             stock = product.stock,

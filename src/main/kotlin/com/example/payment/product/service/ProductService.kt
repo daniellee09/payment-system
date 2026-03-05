@@ -33,9 +33,9 @@ class ProductService(
     fun getProducts(): List<ProductResponse> =
         productRepository.findAll().map { ProductResponse.from(it) }
 
-    fun getProduct(productId: Long): ProductResponse {
-        val product = productRepository.findById(productId)
-            .orElseThrow { ProductNotFoundException() }
+    fun getProduct(productId: String): ProductResponse {
+        val product = productRepository.findByProductId(productId)
+            ?: throw ProductNotFoundException()
         return ProductResponse.from(product)
     }
 }

@@ -14,6 +14,7 @@ import org.springframework.data.annotation.LastModifiedDate
 import org.springframework.data.jpa.domain.support.AuditingEntityListener
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * 상품 엔티티.
@@ -33,6 +34,11 @@ class Product(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null
+
+    // 외부 노출용 UUID 식별자. Order/Payment의 orderId, paymentKey와 동일한 전략.
+    // Long 타입 PK를 외부에 노출하면 순차 탐색 공격에 취약하므로 UUID를 별도로 사용한다.
+    @Column(nullable = false, unique = true, length = 36)
+    val productId: String = UUID.randomUUID().toString()
 
     @Column(nullable = false)
     var name: String = name
