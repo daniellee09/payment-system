@@ -14,6 +14,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.annotation.LastModifiedDate
 import org.springframework.data.jpa.domain.support.AuditingEntityListener
@@ -66,6 +67,14 @@ class Order(
 
     @Column(nullable = false)
     val customerName: String = customerName
+
+    /**
+     * 낙관적 락용 버전 필드.
+     * 동시 요청이 같은 주문의 상태를 동시에 변경하려 할 때 Lost Update를 방지한다.
+     */
+    @Version
+    var version: Long = 0
+        protected set
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
