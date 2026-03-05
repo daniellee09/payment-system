@@ -1,11 +1,14 @@
 package com.example.payment.payment.service
 
+import com.example.payment.common.TestFixtures.createOrder
+import com.example.payment.common.TestFixtures.createPayment
+import com.example.payment.common.TestFixtures.createProduct
+import com.example.payment.common.TestFixtures.setField
 import com.example.payment.common.exception.AlreadyPaidException
 import com.example.payment.common.exception.InvalidPaymentStatusException
 import com.example.payment.common.exception.OrderNotFoundException
 import com.example.payment.common.exception.PaymentAmountMismatchException
 import com.example.payment.common.exception.PaymentNotFoundException
-import com.example.payment.order.domain.Order
 import com.example.payment.order.domain.OrderStatus
 import com.example.payment.order.repository.OrderRepository
 import com.example.payment.payment.domain.Payment
@@ -14,8 +17,6 @@ import com.example.payment.payment.domain.PaymentStatus
 import com.example.payment.payment.dto.CancelPaymentRequest
 import com.example.payment.payment.dto.ConfirmPaymentRequest
 import com.example.payment.payment.repository.PaymentRepository
-import com.example.payment.product.domain.Product
-import com.example.payment.product.repository.ProductRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -29,21 +30,20 @@ import java.time.LocalDateTime
 /**
  * PaymentService 단위 테스트.
  *
- * 결제 승인(멱등성 검증, 금액 검증), 결제 취소(상태 전이, 재고 복원)를 검증한다.
+ * 결제 승인(멱등성 검증, 금액 검증, 이미 결제된 주문 차단),
+ * 결제 취소(상태 전이, 재고 복원, 취소 사유 기록)를 검증한다.
  */
 class PaymentServiceTest {
 
     private lateinit var paymentRepository: PaymentRepository
     private lateinit var orderRepository: OrderRepository
-    private lateinit var productRepository: ProductRepository
     private lateinit var paymentService: PaymentService
 
     @BeforeEach
     fun setUp() {
         paymentRepository = mockk()
         orderRepository = mockk()
-        productRepository = mockk()
-        paymentService = PaymentService(paymentRepository, orderRepository, productRepository)
+        paymentService = PaymentService(paymentRepository, orderRepository)
     }
 
     // ── 결제 승인 ──────────────────────────────────────────
@@ -62,7 +62,7 @@ class PaymentServiceTest {
 
         every { paymentRepository.findByIdempotencyKey("idempotency-key-1") } returns null
         every { orderRepository.findByOrderId(order.orderId) } returns order
-        every { paymentRepository.save(any<Payment>()) } answers {
+        every { paymentRepository.saveAndFlush(any<Payment>()) } answers {
             val payment = firstArg<Payment>()
             setField(payment, "createdAt", LocalDateTime.now())
             setField(payment, "updatedAt", LocalDateTime.now())
@@ -101,8 +101,8 @@ class PaymentServiceTest {
 
         // then: 새 결제를 생성하지 않고 기존 결과를 반환
         assertEquals(PaymentStatus.DONE, response.status)
-        // save가 호출되지 않았는지 확인
-        verify(exactly = 0) { paymentRepository.save(any<Payment>()) }
+        // saveAndFlush가 호출되지 않았는지 확인
+        verify(exactly = 0) { paymentRepository.saveAndFlush(any<Payment>()) }
     }
 
     @Test
@@ -149,6 +149,51 @@ class PaymentServiceTest {
         assert(exception.message?.contains("25000") == true)
     }
 
+    @Test
+    fun `이미 결제된 주문에 재결제 시도하면 AlreadyPaidException이 발생한다`() {
+        // given: PAID 상태의 주문
+        val product = createProduct(stock = 8)
+        val order = createOrder(product = product, totalAmount = BigDecimal("30000.00"))
+        order.markAsPaid()
+
+        every { paymentRepository.findByIdempotencyKey(any()) } returns null
+        every { orderRepository.findByOrderId(order.orderId) } returns order
+
+        val request = ConfirmPaymentRequest(
+            orderId = order.orderId,
+            amount = BigDecimal("30000.00"),
+            paymentMethod = PaymentMethod.CARD,
+            idempotencyKey = "new-key",
+        )
+
+        // when & then
+        assertThrows<AlreadyPaidException> {
+            paymentService.confirmPayment(request)
+        }
+    }
+
+    @Test
+    fun `멱등성 재요청 시 금액이 다르면 예외가 발생한다`() {
+        // given: 기존 결제는 30000원인데 재요청에서 25000원으로 보낸 경우
+        val product = createProduct(stock = 10)
+        val order = createOrder(product = product, totalAmount = BigDecimal("30000.00"))
+        val existingPayment = createPayment(order = order, amount = BigDecimal("30000.00"), status = PaymentStatus.DONE)
+
+        every { paymentRepository.findByIdempotencyKey("same-key") } returns existingPayment
+
+        val request = ConfirmPaymentRequest(
+            orderId = order.orderId,
+            amount = BigDecimal("25000.00"),
+            paymentMethod = PaymentMethod.CARD,
+            idempotencyKey = "same-key",
+        )
+
+        // when & then
+        assertThrows<PaymentAmountMismatchException> {
+            paymentService.confirmPayment(request)
+        }
+    }
+
     // ── 결제 취소 ──────────────────────────────────────────
 
     @Test
@@ -172,6 +217,8 @@ class PaymentServiceTest {
         assertEquals(OrderStatus.CANCELLED, order.status)
         // 재고 복원 확인: 8 + 2 = 10
         assertEquals(10, product.stock)
+        // 취소 사유 기록 확인
+        assertEquals("단순 변심", payment.cancelReason)
     }
 
     @Test
@@ -219,73 +266,5 @@ class PaymentServiceTest {
         assertThrows<InvalidPaymentStatusException> {
             paymentService.cancelPayment(payment.paymentKey, request)
         }
-    }
-
-    // ── 테스트 헬퍼 ──────────────────────────────────────────
-
-    private fun createProduct(
-        id: Long = 1L,
-        name: String = "테스트 상품",
-        price: BigDecimal = BigDecimal("15000.00"),
-        stock: Int,
-    ): Product {
-        val product = Product(name = name, price = price, stock = stock)
-        setField(product, "id", id)
-        setField(product, "createdAt", LocalDateTime.now())
-        setField(product, "updatedAt", LocalDateTime.now())
-        return product
-    }
-
-    private fun createOrder(
-        product: Product,
-        totalAmount: BigDecimal,
-        quantity: Int = 2,
-        customerName: String = "테스트 고객",
-    ): Order {
-        val order = Order(
-            product = product,
-            quantity = quantity,
-            totalAmount = totalAmount,
-            customerName = customerName,
-        )
-        setField(order, "id", 1L)
-        setField(order, "createdAt", LocalDateTime.now())
-        setField(order, "updatedAt", LocalDateTime.now())
-        return order
-    }
-
-    private fun createPayment(
-        order: Order,
-        amount: BigDecimal,
-        status: PaymentStatus,
-        idempotencyKey: String = "test-idempotency-key",
-    ): Payment {
-        val payment = Payment(
-            order = order,
-            amount = amount,
-            paymentMethod = PaymentMethod.CARD,
-            idempotencyKey = idempotencyKey,
-        )
-        setField(payment, "createdAt", LocalDateTime.now())
-        setField(payment, "updatedAt", LocalDateTime.now())
-
-        // 상태를 원하는 값으로 설정 (READY가 아닌 경우)
-        when (status) {
-            PaymentStatus.DONE -> payment.approve()
-            PaymentStatus.CANCELLED -> {
-                payment.approve()
-                // cancel()을 호출하려면 order도 PAID 상태여야 한다.
-                // 하지만 테스트에서는 payment 상태만 직접 설정하는 것이 더 명확하다.
-                setField(payment, "status", PaymentStatus.CANCELLED)
-            }
-            PaymentStatus.READY -> { /* 기본값 */ }
-        }
-        return payment
-    }
-
-    private fun setField(target: Any, fieldName: String, value: Any) {
-        val field = target.javaClass.getDeclaredField(fieldName)
-        field.isAccessible = true
-        field.set(target, value)
     }
 }

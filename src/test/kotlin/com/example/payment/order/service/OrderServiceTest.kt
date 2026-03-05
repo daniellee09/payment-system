@@ -1,5 +1,8 @@
 package com.example.payment.order.service
 
+import com.example.payment.common.TestFixtures.createOrder
+import com.example.payment.common.TestFixtures.createProduct
+import com.example.payment.common.TestFixtures.setField
 import com.example.payment.common.exception.OrderNotFoundException
 import com.example.payment.common.exception.OutOfStockException
 import com.example.payment.common.exception.ProductNotFoundException
@@ -7,11 +10,9 @@ import com.example.payment.order.domain.Order
 import com.example.payment.order.domain.OrderStatus
 import com.example.payment.order.dto.CreateOrderRequest
 import com.example.payment.order.repository.OrderRepository
-import com.example.payment.product.domain.Product
 import com.example.payment.product.repository.ProductRepository
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -140,44 +141,5 @@ class OrderServiceTest {
 
         // then: 서버가 계산한 금액 검증
         assertEquals(BigDecimal("30000.00"), response.totalAmount)
-    }
-
-    // ── 테스트 헬퍼 ──────────────────────────────────────────
-
-    private fun createProduct(
-        id: Long = 1L,
-        name: String,
-        price: BigDecimal,
-        stock: Int,
-    ): Product {
-        val product = Product(name = name, price = price, stock = stock)
-        setField(product, "id", id)
-        setField(product, "createdAt", LocalDateTime.now())
-        setField(product, "updatedAt", LocalDateTime.now())
-        return product
-    }
-
-    private fun createOrder(
-        product: Product,
-        quantity: Int,
-        totalAmount: BigDecimal,
-        customerName: String = "테스트 고객",
-    ): Order {
-        val order = Order(
-            product = product,
-            quantity = quantity,
-            totalAmount = totalAmount,
-            customerName = customerName,
-        )
-        setField(order, "id", 1L)
-        setField(order, "createdAt", LocalDateTime.now())
-        setField(order, "updatedAt", LocalDateTime.now())
-        return order
-    }
-
-    private fun setField(target: Any, fieldName: String, value: Any) {
-        val field = target.javaClass.getDeclaredField(fieldName)
-        field.isAccessible = true
-        field.set(target, value)
     }
 }
