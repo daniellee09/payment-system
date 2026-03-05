@@ -1,0 +1,30 @@
+services:
+  mysql:
+    # MySQL 8.0.28+: Server Hello에서 caching_sha2_password를 고정 전송 → Connector/J 8.x 인증 실패
+    # MySQL 8.0.27: 8.0.28 이전 마지막 버전 — default_authentication_plugin 설정이 Server Hello에 정상 반영됨
+    # Connector/J 8.0.33 + MySQL 8.0.27: 오랜 기간 검증된 안정 조합
+    image: mysql:8.0.27
+    container_name: payment-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: payment
+      MYSQL_USER: payment
+      MYSQL_PASSWORD: payment
+    ports:
+      # 로컬 MySQL(3306)과 충돌 방지를 위해 호스트 포트를 3307로 분리
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # utf8mb4: 이모지 포함 한글 완전 지원 / unicode_ci: 대소문자 무시 정렬
+    # mysql_native_password: MySQL 8.0 기본값(caching_sha2_password)은 useSSL=false 환경에서
+    # Connector/J 8.0.33과 handshake 실패 → 모든 유저를 native password로 생성하도록 강제
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+
+  redis:
+    image: redis:7-alpine
+    container_name: payment-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  mysql-data:

@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: payment
+
+  datasource:
+    url: jdbc:mysql://localhost:3307/payment?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: payment
+    password: payment
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # none: Hibernate DDL 연결을 완전히 차단해 Connector/J auth_gssapi_client 버그를 우회한다.
+      # 테이블은 schema.sql로 직접 관리한다. (docker-compose down -v로 초기화)
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+        # Hibernate 시작 시 JDBC 메타데이터 조회 연결을 생성하지 않도록 설정
+        # dialect와 ddl-auto를 명시했으므로 메타데이터 조회 없이도 정상 동작
+        # (과거 Connector/J 9.x auth_gssapi_client 버그 우회 목적으로 추가했으나,
+        #  현재는 불필요한 DB 커넥션을 줄이는 일반 최적화로 유지)
+        boot.allow_jdbc_metadata_access: false
+    # OSIV(Open Session in View) 비활성화 — 트랜잭션 범위 밖에서 쿼리 실행을 허용하지 않음
+    # 실수로 Controller 레이어에서 Lazy Loading을 유발하는 것을 방지하기 위함
+    open-in-view: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  cache:
+    type: redis
+    redis:
+      # 기본 TTL 5분 (300초 * 1000ms). 도메인별 TTL은 Config에서 개별 설정
+      time-to-live: 300000
+
+logging:
+  level:
+    # 실행 SQL 출력 (개발 환경 전용 — 운영에서는 제거)
+    org.hibernate.SQL: debug
+    # 바인딩 파라미터 출력 (SQL의 ? 자리에 어떤 값이 들어가는지 확인)
+    org.hibernate.orm.jdbc.bind: trace
+    # HikariCP 연결 설정 확인용 (일회성 디버그 — 문제 해결 후 제거)
+    com.zaxxer.hikari: debug
