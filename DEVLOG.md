@@ -13,6 +13,7 @@
 | 2주차 | Product + Order 도메인 | ✅ 완료 |
 | 2주차 테스트 | contextLoads + 컨테이너 연결 검증 | ✅ 완료 |
 | 3주차 | Payment + 에러 처리 + 단위 테스트 | ✅ 완료 |
+| 3주차 디버그 | 코드 리뷰 기반 14건 이슈 수정 | ✅ 완료 |
 | 4주차 | Redis 캐싱 + 동시성 제어 | ⬜ 대기 |
 
 ---
@@ -222,6 +223,50 @@ Dialect와 DDL 설정이 이미 명시되어 있으므로 메타데이터 조회
 JPA 엔티티의 `id`, `createdAt`은 DB가 설정하는 값이다. 단위 테스트에서는 DB가 없으므로 리플렉션으로 직접 세팅한다. MockK의 `every { save(any()) } answers { firstArg() }` 패턴과 결합해 실제 저장 없이 테스트한다.
 
 **빌드 결과**: `./gradlew test` — BUILD SUCCESSFUL (16s), 15개 테스트 전부 통과 ✅
+
+---
+
+---
+
+## [3주차] 디버그 수정 — 2026-03-05
+
+> **목표**: 코드 리뷰에서 발견된 14건의 이슈(치명적 3, 경고 5, 권고 6)를 우선순위 순으로 수정하고 빌드 검증
+
+### ▶ 치명적 오류 수정 (3건)
+
+| # | 이슈 | 수정 내용 | 핵심 결정 사항 |
+|---|------|-----------|--------------|
+| 1 | schema.sql 미실행 | `application.yml`에 `spring.sql.init.mode: always` + `defer-datasource-initialization: true` 추가 | embedded가 아닌 외부 DB(MySQL)는 `mode: always` 명시 필수. `defer-datasource-initialization`이 없으면 JPA 초기화 전에 SQL이 실행되어 실패 |
+| 2 | 멱등성 키 Race Condition | `save` → `saveAndFlush`로 변경, `DataIntegrityViolationException` catch 후 재조회 | save는 트랜잭션 커밋까지 INSERT를 지연하므로 UNIQUE 위반을 즉시 감지 못함. saveAndFlush로 즉시 DB 반영하여 동시 요청 감지 |
+| 3 | cancelReason 누락 | Payment 엔티티에 `cancelReason: String?` 필드, `cancel(reason: String)` 시그니처, schema에 `cancel_reason` 컬럼 추가 | 취소 사유를 DB에 기록해 이력 관리와 고객 안내에 활용. PaymentResponse에도 반영 |
+
+### ▶ 경고 수정 (5건)
+
+| # | 이슈 | 수정 내용 |
+|---|------|-----------|
+| 4 | PaymentService `ProductRepository` 미사용 | 생성자에서 `productRepository` 제거. 재고 복원은 `order.product`로 접근하므로 직접 의존 불필요 |
+| 5 | Product에 UUID 외부 식별자 없음 | `productId: String(UUID)` 추가, ProductResponse `id: Long` → `productId: String`, Controller/Service/Repository 전체 변경, schema에 `product_id VARCHAR(36)` + UNIQUE 추가 |
+| 6 | 이미 결제된 주문 재결제 미검증 | `confirmPayment`에서 주문 조회 직후 `order.status == PAID`이면 `AlreadyPaidException` throw. markAsPaid()보다 앞에서 명확한 에러 제공 |
+| 7 | OrderRepository LAZY 프록시 문제 | `findByOrderId`에 `@EntityGraph(attributePaths = ["product"])` 추가. OSIV=false 환경에서 트랜잭션 밖 접근 시 LazyInitializationException 방지 |
+| 8 | Order/Payment 낙관적 락 없음 | 두 엔티티에 `@Version var version: Long = 0` 추가, schema에 `version BIGINT NOT NULL DEFAULT 0` 컬럼 추가 |
+
+### ▶ 권고 수정 (6건)
+
+| # | 이슈 | 수정 내용 |
+|---|------|-----------|
+| 9 | 멱등성 재요청 값 검증 미비 | `validateIdempotencyRequest()` 추가: orderId/amount 불일치 시 `PaymentAmountMismatchException` throw |
+| 10 | 테스트 헬퍼 중복 | `TestFixtures.kt` 공통 파일 생성, 3개 테스트에서 private 헬퍼 제거 후 공통 호출로 전환 |
+| 11 | 재고 0 등록 허용 | `CreateProductRequest` `@Min(0)` → `@Min(1)` (구매 불가 상품 등록 방지) |
+| 12 | `ProductServiceTest` 미사용 import | `io.mockk.slot` 제거 |
+| 13 | `OrderServiceTest` 미사용 import | `io.mockk.verify` 제거 |
+| 14 | `PaymentApplicationTests` 로컬 Docker 의존 | `@Disabled("로컬 Docker 환경 필요")` 추가 |
+
+### ▶ 빌드 검증
+
+```
+./gradlew test → BUILD SUCCESSFUL (43s)
+테스트: 17개 통과 (기존 15개 + 신규 2개: AlreadyPaid 검증, 멱등성 값 검증)
+```
 
 ---
 
