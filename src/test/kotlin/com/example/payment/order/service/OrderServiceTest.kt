@@ -6,6 +6,7 @@ import com.example.payment.common.TestFixtures.setField
 import com.example.payment.common.exception.OrderNotFoundException
 import com.example.payment.common.exception.OutOfStockException
 import com.example.payment.common.exception.ProductNotFoundException
+import com.example.payment.common.lock.DistributedLockManager
 import com.example.payment.order.domain.Order
 import com.example.payment.order.domain.OrderStatus
 import com.example.payment.order.dto.CreateOrderRequest
@@ -20,22 +21,32 @@ import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-
 /**
  * OrderService 단위 테스트.
- * ProductRepository와 OrderRepository를 MockK로 모킹해 비즈니스 로직만 검증한다.
+ * ProductRepository, OrderRepository, DistributedLockManager를 MockK로 모킹해 비즈니스 로직만 검증한다.
  */
 class OrderServiceTest {
 
     private lateinit var orderRepository: OrderRepository
     private lateinit var productRepository: ProductRepository
+    private lateinit var distributedLockManager: DistributedLockManager
     private lateinit var orderService: OrderService
 
     @BeforeEach
     fun setUp() {
         orderRepository = mockk()
         productRepository = mockk()
-        orderService = OrderService(orderRepository, productRepository)
+        distributedLockManager = mockk()
+
+        // 단위 테스트에서는 실제 Redis 락 없이 block을 그대로 실행한다.
+        // 분산 락 동작은 ConcurrencyTest(통합 테스트)에서 검증한다.
+        // any<() -> Any>()로 타입을 명시해야 Kotlin 컴파일러가 withLock<T>의 T를 추론할 수 있다.
+        @Suppress("UNCHECKED_CAST")
+        every { distributedLockManager.withLock(any<String>(), any<() -> Any>()) } answers {
+            (args[1] as () -> Any).invoke()
+        }
+
+        orderService = OrderService(orderRepository, productRepository, distributedLockManager)
     }
 
     @Test

@@ -24,6 +24,7 @@ enum class ErrorCode(val status: HttpStatus, val message: String) {
     INVALID_ORDER_STATUS(HttpStatus.CONFLICT, "현재 주문 상태에서는 해당 작업을 수행할 수 없습니다."),
     INVALID_PAYMENT_STATUS(HttpStatus.CONFLICT, "현재 결제 상태에서는 해당 작업을 수행할 수 없습니다."),
     CONCURRENT_UPDATE(HttpStatus.CONFLICT, "동시 요청이 충돌했습니다. 잠시 후 다시 시도해주세요."),
+    LOCK_ACQUISITION_FAILED(HttpStatus.CONFLICT, "현재 요청이 많습니다. 잠시 후 다시 시도해주세요."),
 
     // 500 Internal Server Error
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),

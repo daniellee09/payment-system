@@ -34,10 +34,10 @@ spring:
       port: 6379
 
   cache:
+    # CacheConfig에서 RedisCacheManager를 직접 빈으로 등록하므로 type 선언이 필수는 아니다.
+    # 명시적으로 선언해 의도를 코드로 표현하고 다른 캐시 구현체로의 실수 전환을 방지한다.
     type: redis
-    redis:
-      # 기본 TTL 5분 (300초 * 1000ms). 도메인별 TTL은 Config에서 개별 설정
-      time-to-live: 300000
+    # TTL은 CacheConfig에서 캐시별로 개별 관리하므로 여기서는 설정하지 않는다.
 
 logging:
   level:
@@ -45,5 +45,3 @@ logging:
     org.hibernate.SQL: debug
     # 바인딩 파라미터 출력 (SQL의 ? 자리에 어떤 값이 들어가는지 확인)
     org.hibernate.orm.jdbc.bind: trace
-    # HikariCP 연결 설정 확인용 (일회성 디버그 — 문제 해결 후 제거)
-    com.zaxxer.hikari: debug

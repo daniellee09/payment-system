@@ -35,8 +35,11 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	// Jackson Kotlin 모듈 (data class 직렬화/역직렬화)
 	implementation("tools.jackson.module:jackson-module-kotlin")
-	// Redisson (Redis 분산 락 구현 — 4주차에 Spring Boot 4.x 호환 버전으로 추가 예정)
-	// implementation("org.redisson:redisson-spring-boot-starter:3.25.0")
+	// Redisson (분산 락 구현 — Spring Boot 4.x 호환을 위해 starter 대신 plain 라이브러리 사용)
+	// redisson-spring-boot-starter는 Spring Boot 버전에 강하게 결합되어 있어
+	// 최신 Spring Boot 4.x와 호환되는 버전을 특정하기 어렵다.
+	// plain redisson은 RedissonClient를 수동으로 구성하므로 Spring Boot 버전에 무관하게 동작한다.
+	implementation("org.redisson:redisson:3.40.0")
 	// MySQL 드라이버 (런타임만 필요)
 	// Spring Boot 4.x BOM 관리 버전(9.x)을 사용한다.
 	// 8.0.33은 HikariCP 7.x(Spring Boot 4.x 번들)와 호환 불가 — BadAuthenticationPlugin 에러 발생

@@ -50,3 +50,9 @@ class PaymentAmountMismatchException(expected: BigDecimal, actual: BigDecimal) :
 // ── Concurrency ──────────────────────────────────────────
 
 class ConcurrentUpdateException : BusinessException(ErrorCode.CONCURRENT_UPDATE)
+
+/**
+ * 분산 락 획득 타임아웃 예외.
+ * 동시 요청이 너무 많아 WAIT_TIME 내에 락을 얻지 못한 경우 발생한다.
+ */
+class LockAcquisitionFailedException : BusinessException(ErrorCode.LOCK_ACQUISITION_FAILED)

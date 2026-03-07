@@ -1,6 +1,7 @@
 package com.example.payment.product.dto
 
 import com.example.payment.product.domain.Product
+import java.io.Serializable
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
@@ -12,6 +13,9 @@ import java.time.LocalDateTime
  * - 응답 형식이 바뀌어도 엔티티 변경 없이 DTO만 수정하면 된다
  *
  * id(Long)가 아닌 productId(UUID)를 노출해 순차 탐색 공격을 방지한다.
+ *
+ * Serializable을 구현하는 이유:
+ * Redis 캐시의 기본 직렬화 방식(JDK 직렬화)이 Serializable을 요구한다.
  */
 data class ProductResponse(
     val productId: String,
@@ -19,8 +23,11 @@ data class ProductResponse(
     val price: BigDecimal,
     val stock: Int,
     val createdAt: LocalDateTime,
-) {
+) : Serializable {
     companion object {
+        // 역직렬화 호환성 보장을 위해 명시적으로 선언
+        private const val serialVersionUID = 1L
+
         fun from(product: Product): ProductResponse = ProductResponse(
             productId = product.productId,
             name = product.name,
