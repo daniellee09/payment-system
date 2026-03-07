@@ -16,7 +16,7 @@
 | 3주차 디버그 | 코드 리뷰 기반 14건 이슈 수정 | ✅ 완료 |
 | 프론트엔드 | 대시보드 UI + API 버그 수정 | ✅ 완료 |
 | POS 프론트엔드 | 실무형 POS 결제 단말기 UI | ✅ 완료 |
-| 4주차 | Redis 캐싱 + 동시성 제어 | ⬜ 대기 |
+| 4주차 | Redis 캐싱 + 동시성 제어 | ✅ 완료 |
 
 ---
 
@@ -405,5 +405,72 @@ ALTER TABLE products ADD UNIQUE KEY uk_product_id (product_id);
 - 결제 취소: 확인 모달 -> 취소 API 호출 -> 재고 복원 반영 -> 취소 영수증 표시
 - 에러 토스트: 화면 하단 중앙에 3초간 표시
 - 스켈레톤 로딩: 상품 목록 로딩 중 스켈레톤 UI 표시
+
+---
+
+## [4주차] Redis 캐싱 + 분산 락 + 동시성 제어 — 2026-03-07
+
+> **목표**: 상품 조회에 Redis 캐싱을 적용해 DB 부하를 줄이고, Redisson 분산 락으로 재고 차감 동시성 문제를 해결한다.
+
+### ▶ Redis 캐싱 (3개 파일)
+
+| 파일 | 핵심 결정 사항 |
+|------|--------------|
+| `common/config/CacheConfig.kt` | `@EnableCaching` 분리. PRODUCT_LIST(5분), PRODUCT_DETAIL(10분) TTL 개별 설정. 키는 StringRedisSerializer로 사람이 읽을 수 있게 |
+| `product/dto/ProductResponse.kt` | `Serializable` 구현 추가. JDK 직렬화 기반 Redis 캐시에 저장하려면 필수 |
+| `product/service/ProductService.kt` | `getProducts()` → `@Cacheable(PRODUCT_LIST)`, `getProduct()` → `@Cacheable(PRODUCT_DETAIL, key="#productId")`, `createProduct()` → `@CacheEvict(PRODUCT_LIST, allEntries=true)` |
+
+**핵심 결정: JDK 직렬화 선택 이유**
+Jackson 기반 직렬화(`GenericJackson2JsonRedisSerializer`)는 Spring Boot 4.x(Jackson 3.x)에서 API 호환성 이슈가 있을 수 있다. JDK 직렬화는 버전 무관하게 안정적으로 동작하므로 이 프로젝트에서 채택했다. 단, 직렬화된 바이트 형식은 Redis CLI에서 바로 읽기 어렵다는 단점이 있다.
+
+### ▶ Redisson 분산 락 (3개 파일)
+
+| 파일 | 핵심 결정 사항 |
+|------|--------------|
+| `build.gradle.kts` | `org.redisson:redisson:3.40.0` 추가. `redisson-spring-boot-starter` 대신 plain 라이브러리 사용 — Spring Boot 4.x 자동 설정과의 충돌 가능성 회피 |
+| `common/config/RedissonConfig.kt` | `RedissonClient` 빈을 수동 등록. `spring.data.redis.host/port`를 재사용해 Redis 설정을 한 곳에서 관리. `destroyMethod="shutdown"`으로 Netty 스레드 정상 종료 |
+| `common/lock/DistributedLockManager.kt` | `withLock(key, block)` 유틸리티. 대기 5초, 점유 10초. `isHeldByCurrentThread` 검사로 만료 후 중복 해제(IllegalMonitorStateException) 방지 |
+
+**핵심 결정: 분산 락 + 낙관적 락 이중 방어**
+분산 락만 사용하면 Redis 장애 시 동시성 보호가 무너진다. `@Version` 낙관적 락을 그대로 유지해 분산 락이 실패하거나 극히 짧은 레이스 윈도우(락 해제 → TX 커밋 사이)가 발생해도 DB 레벨에서 Lost Update를 차단한다.
+
+**핵심 결정: Lettuce + Redisson 동시 사용**
+Spring Data Redis(Lettuce)는 `@Cacheable` 캐싱에, Redisson은 분산 락에 사용한다. 두 클라이언트는 각자의 Netty 연결 풀을 유지하므로 서로 간섭하지 않는다. 분산 락에 Lettuce 대신 Redisson을 선택한 이유는, Redisson RLock이 Redis Pub/Sub으로 락 해제를 구독해 busy-wait 없이 대기하기 때문이다.
+
+**핵심 결정: 락 키를 productId 단위로 설정**
+`"product:{productId}"` 형태로 상품별 락을 분리한다. 상품 A와 B의 주문은 서로 관계없으므로 동시에 처리 가능하고, 같은 상품에 대한 주문만 직렬화된다.
+
+### ▶ 에러 코드 추가
+
+| 항목 | 내용 |
+|------|------|
+| `ErrorCode.LOCK_ACQUISITION_FAILED` | 409 Conflict. 락 획득 타임아웃 시 반환 |
+| `LockAcquisitionFailedException` | `BusinessException` 상속. GlobalExceptionHandler가 자동 처리 |
+
+### ▶ 동시성 통합 테스트
+
+| 파일 | 내용 |
+|------|------|
+| `ConcurrencyTest.kt` | 재고 10개 상품에 100개 스레드 동시 주문 → 정확히 10개 성공, 90개 실패 검증 |
+
+**핵심 결정: @Disabled 기본 설정**
+`ConcurrencyTest`는 실제 DB와 Redis가 필요한 통합 테스트이므로, Docker 환경 없이 실행하면 실패한다. 일반 단위 테스트 빌드에서 제외하고, Docker 환경에서 `@Disabled`를 제거 후 실행한다.
+
+### ▶ OrderServiceTest 수정
+
+MockK로 `DistributedLockManager.withLock`을 모킹할 때 제네릭 함수의 타입 추론 문제 해결:
+```kotlin
+every { distributedLockManager.withLock(any<String>(), any<() -> Any>()) } answers {
+    (args[1] as () -> Any).invoke()
+}
+```
+`any<() -> Any>()`로 람다 타입을 명시해야 Kotlin 컴파일러가 `withLock<T>`의 `T`를 추론할 수 있다.
+
+### ▶ 빌드 검증
+
+```
+./gradlew test → BUILD SUCCESSFUL
+단위 테스트 17개 전부 통과 (ConcurrencyTest는 @Disabled)
+```
 
 ---
