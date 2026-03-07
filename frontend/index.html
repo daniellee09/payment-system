@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>결제 시스템 대시보드</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 토스트 알림 컨테이너 -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- 확인 모달 -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>확인</h3>
+      <p>정말 실행하시겠습니까?</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary">취소</button>
+        <button class="btn btn-danger">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 헤더 -->
+  <header class="app-header">
+    <h1>Payment System Dashboard</h1>
+    <p>결제 시스템 API 테스트 대시보드 &mdash; 상품 등록, 주문, 결제 승인/취소 전체 플로우</p>
+  </header>
+
+  <div class="app-container">
+
+    <!-- ========================================
+         플로우 시각화
+         ======================================== -->
+    <section class="flow-section">
+      <div class="flow-steps">
+        <div class="flow-step active" data-tab="products">
+          <div class="flow-step-icon">1</div>
+          <div class="flow-step-label">상품 등록</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step" data-tab="orders">
+          <div class="flow-step-icon">2</div>
+          <div class="flow-step-label">주문 생성</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step" data-tab="payments">
+          <div class="flow-step-icon">3</div>
+          <div class="flow-step-label">결제 승인</div>
+        </div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-step" data-tab="payments">
+          <div class="flow-step-icon">4</div>
+          <div class="flow-step-label">결제 취소</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+         탭 네비게이션
+         ======================================== -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="products">상품 관리</button>
+      <button class="tab-btn" data-tab="orders">주문 생성</button>
+      <button class="tab-btn" data-tab="payments">결제</button>
+    </nav>
+
+    <!-- ========================================
+         탭 1: 상품 관리
+         ======================================== -->
+    <div id="tab-products" class="tab-content active">
+      <div class="split-layout">
+
+        <!-- 상품 등록 폼 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>상품 등록</h2>
+            <p>새 상품을 등록합니다. 모든 필드는 필수입니다.</p>
+          </div>
+          <div class="card-body">
+            <form id="product-form">
+              <div class="form-group">
+                <label class="form-label" for="product-name">상품명</label>
+                <input class="form-input" type="text" id="product-name"
+                       placeholder="예: 프리미엄 이어폰" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="product-price">가격 (원)</label>
+                <input class="form-input" type="number" id="product-price"
+                       placeholder="예: 50000" min="1" step="1" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="product-stock">재고 수량</label>
+                <input class="form-input" type="number" id="product-stock"
+                       placeholder="예: 100" min="1" step="1" required>
+              </div>
+              <button class="btn btn-primary btn-block" type="submit">상품 등록</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 상품 목록 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>상품 목록</h2>
+            <p>등록된 상품을 클릭하면 상세 정보를 볼 수 있습니다.</p>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>상품명</th>
+                  <th>가격</th>
+                  <th>재고</th>
+                  <th>등록일</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody">
+                <!-- 동적 렌더링 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 상품 상세 -->
+      <div id="product-detail" class="card mt-24" style="display:none">
+        <!-- 동적 렌더링 -->
+      </div>
+    </div>
+
+    <!-- ========================================
+         탭 2: 주문 생성
+         ======================================== -->
+    <div id="tab-orders" class="tab-content">
+      <div class="split-layout">
+
+        <!-- 상품 선택 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>상품 선택</h2>
+            <p>주문할 상품을 선택하세요.</p>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>상품명</th>
+                  <th>가격</th>
+                  <th>재고</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="order-products-tbody">
+                <!-- 동적 렌더링 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 주문 폼 -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h2>주문 정보 입력</h2>
+              <p>상품 선택 후 수량과 고객명을 입력하세요.</p>
+            </div>
+            <div class="card-body">
+              <form id="order-form">
+                <div class="form-group">
+                  <label class="form-label">선택된 상품</label>
+                  <input class="form-input" type="text" id="order-selected-product"
+                         readonly placeholder="좌측에서 상품을 선택하세요">
+                  <input type="hidden" id="order-product-id">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="order-quantity">수량</label>
+                  <input class="form-input" type="number" id="order-quantity"
+                         min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="order-customer">고객명</label>
+                  <input class="form-input" type="text" id="order-customer"
+                         placeholder="예: 홍길동" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">예상 결제 금액</label>
+                  <div id="order-total-display" style="font-size:24px;font-weight:700;color:var(--color-primary)">
+                    &#8361;0
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block" type="submit">주문 생성</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- 주문 조회 -->
+          <div class="card mt-24">
+            <div class="card-header">
+              <h2>주문 조회</h2>
+              <p>주문 ID로 기존 주문을 조회합니다.</p>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label" for="lookup-order-id">주문 ID</label>
+                <input class="form-input mono" type="text" id="lookup-order-id"
+                       placeholder="UUID 형식의 주문 ID">
+              </div>
+              <button class="btn btn-secondary btn-block" type="button" id="btn-lookup-order">
+                조회
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 주문 결과 -->
+      <div id="order-result" class="card mt-24" style="display:none">
+        <!-- 동적 렌더링 -->
+      </div>
+    </div>
+
+    <!-- ========================================
+         탭 3: 결제
+         ======================================== -->
+    <div id="tab-payments" class="tab-content">
+      <div class="split-layout">
+
+        <!-- 결제 승인 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>결제 승인</h2>
+            <p>주문에 대한 결제를 승인합니다. 멱등성 키로 중복 요청을 방지합니다.</p>
+          </div>
+          <div class="card-body">
+            <form id="payment-form">
+              <div class="form-group">
+                <label class="form-label" for="payment-order-id">주문 ID (orderId)</label>
+                <input class="form-input mono" type="text" id="payment-order-id"
+                       placeholder="UUID 형식의 주문 ID" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="payment-amount">결제 금액 (원)</label>
+                <input class="form-input" type="number" id="payment-amount"
+                       placeholder="주문 금액과 일치해야 합니다" min="1" step="1" required>
+                <div class="form-hint">주문 금액과 불일치 시 PAYMENT_AMOUNT_MISMATCH 에러가 발생합니다.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="payment-method">결제 수단</label>
+                <select class="form-select" id="payment-method" required>
+                  <option value="CARD">카드 결제</option>
+                  <option value="VIRTUAL_ACCOUNT">가상계좌</option>
+                  <option value="EASY_PAY">간편결제</option>
+                  <option value="TRANSFER">계좌이체</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="payment-idempotency-key">멱등성 키 (idempotencyKey)</label>
+                <div style="display:flex;gap:8px">
+                  <input class="form-input mono" type="text" id="payment-idempotency-key"
+                         readonly style="flex:1">
+                  <button class="btn btn-secondary btn-sm" type="button" id="btn-regen-key"
+                          title="새 키 생성">&#x21bb;</button>
+                </div>
+                <div class="form-hint">같은 키로 재요청하면 서버가 기존 결과를 반환합니다 (멱등성 보장).</div>
+              </div>
+              <button class="btn btn-primary btn-block" type="submit">결제 승인</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 결제 취소 -->
+        <div class="card">
+          <div class="card-header">
+            <h2>결제 취소</h2>
+            <p>결제 키로 결제를 취소합니다. 재고가 복원됩니다.</p>
+          </div>
+          <div class="card-body">
+            <form id="cancel-form">
+              <div class="form-group">
+                <label class="form-label" for="cancel-payment-key">결제 키 (paymentKey)</label>
+                <input class="form-input mono" type="text" id="cancel-payment-key"
+                       placeholder="결제 승인 시 발급된 paymentKey" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cancel-reason">취소 사유</label>
+                <input class="form-input" type="text" id="cancel-reason"
+                       placeholder="예: 고객 변심, 상품 불량" required>
+              </div>
+              <button class="btn btn-danger btn-block" type="submit">결제 취소</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- 결제 결과 -->
+      <div id="payment-result" class="card mt-24" style="display:none">
+        <!-- 동적 렌더링 -->
+      </div>
+    </div>
+
+    <!-- ========================================
+         응답 뷰어 (공통)
+         ======================================== -->
+    <div id="response-viewer" class="response-viewer mt-24">
+      <div class="response-viewer-header">
+        <h3>API 응답 뷰어</h3>
+        <span class="response-status">대기 중</span>
+      </div>
+      <div class="response-body">// API를 호출하면 여기에 응답이 표시됩니다.</div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
