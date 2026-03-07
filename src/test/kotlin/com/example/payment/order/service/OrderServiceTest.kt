@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.Optional
+
 
 /**
  * OrderService 단위 테스트.
@@ -42,9 +42,9 @@ class OrderServiceTest {
     fun `주문을 정상적으로 생성하고 재고를 차감한다`() {
         // given
         val product = createProduct(id = 1L, name = "노트북", price = BigDecimal("1500000.00"), stock = 10)
-        val request = CreateOrderRequest(productId = 1L, quantity = 2, customerName = "홍길동")
+        val request = CreateOrderRequest(productId = product.productId, quantity = 2, customerName = "홍길동")
 
-        every { productRepository.findById(1L) } returns Optional.of(product)
+        every { productRepository.findByProductId(product.productId) } returns product
         every { orderRepository.save(any<Order>()) } answers {
             val order = firstArg<Order>()
             setField(order, "id", 1L)
@@ -69,8 +69,8 @@ class OrderServiceTest {
     @Test
     fun `존재하지 않는 상품으로 주문 시 예외가 발생한다`() {
         // given
-        val request = CreateOrderRequest(productId = 999L, quantity = 1, customerName = "홍길동")
-        every { productRepository.findById(999L) } returns Optional.empty()
+        val request = CreateOrderRequest(productId = "non-existent-product-id", quantity = 1, customerName = "홍길동")
+        every { productRepository.findByProductId("non-existent-product-id") } returns null
 
         // when & then
         assertThrows<ProductNotFoundException> {
@@ -82,9 +82,9 @@ class OrderServiceTest {
     fun `재고 부족 시 예외가 발생한다`() {
         // given: 재고 3개인 상품에 5개 주문
         val product = createProduct(id = 1L, name = "마우스", price = BigDecimal("35000.00"), stock = 3)
-        val request = CreateOrderRequest(productId = 1L, quantity = 5, customerName = "홍길동")
+        val request = CreateOrderRequest(productId = product.productId, quantity = 5, customerName = "홍길동")
 
-        every { productRepository.findById(1L) } returns Optional.of(product)
+        every { productRepository.findByProductId(product.productId) } returns product
 
         // when & then
         val exception = assertThrows<OutOfStockException> {
@@ -125,9 +125,9 @@ class OrderServiceTest {
     fun `서버에서 총 금액을 계산하므로 클라이언트 금액은 무시된다`() {
         // given: 가격 10000원 * 수량 3 = 30000원이 서버에서 계산되어야 한다
         val product = createProduct(id = 1L, name = "테스트 상품", price = BigDecimal("10000.00"), stock = 100)
-        val request = CreateOrderRequest(productId = 1L, quantity = 3, customerName = "홍길동")
+        val request = CreateOrderRequest(productId = product.productId, quantity = 3, customerName = "홍길동")
 
-        every { productRepository.findById(1L) } returns Optional.of(product)
+        every { productRepository.findByProductId(product.productId) } returns product
         every { orderRepository.save(any<Order>()) } answers {
             val order = firstArg<Order>()
             setField(order, "id", 1L)

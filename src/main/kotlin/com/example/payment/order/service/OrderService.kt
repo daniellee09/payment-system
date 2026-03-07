@@ -30,8 +30,8 @@ class OrderService(
      */
     @Transactional
     fun createOrder(request: CreateOrderRequest): OrderResponse {
-        val product = productRepository.findById(request.productId)
-            .orElseThrow { ProductNotFoundException() }
+        val product = productRepository.findByProductId(request.productId)
+            ?: throw ProductNotFoundException()
 
         // 재고 부족 시 OutOfStockException(409) 발생 — 트랜잭션 롤백
         product.decreaseStock(request.quantity)
