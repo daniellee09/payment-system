@@ -172,6 +172,54 @@ fun createOrder(request: CreateOrderRequest): OrderResponse {
 - 새 코드 작성 전 기존 코드와의 일관성을 먼저 확인할 것
 - 한 번에 너무 많은 파일을 생성하지 말고, 레이어별로 나눠서 진행할 것
 
+## 인프라 사전 점검 체크리스트
+
+작업 시작 전 또는 오류 발생 시 반드시 아래를 확인한다.
+
+### Docker 컨테이너 시작 전
+```bash
+# 1. 사용할 포트가 이미 점유되어 있는지 확인 (Windows)
+cmd //c "netstat -ano | findstr :3308"
+cmd //c "netstat -ano | findstr :6379"
+# 포트를 쓰는 프로세스가 있으면 PID를 확인해 Docker와 충돌하는 로컬 DB/서비스가 없는지 점검
+
+# 2. 실제 연결되는 서버가 맞는지 raw 핸드쉐이크로 검증
+timeout 2 bash -c 'cat < /dev/tcp/localhost/3308' 2>/dev/null | od -c | head -3
+# 응답에 "8.0.27" (MySQL) 또는 예상 버전이 나와야 한다
+# "MariaDB" 등 다른 서버가 나오면 포트 충돌
+
+# 3. 컨테이너 내부와 호스트 포트가 다를 수 있음에 주의
+# docker exec 로 직접 접속하면 내부 MySQL에 연결되므로 정상처럼 보임
+# 반드시 호스트 포트(localhost:3308)로도 별도 검증
+```
+
+### 현재 Docker 포트 설정
+| 서비스 | 내부 포트 | 호스트 포트 | 선택 이유 |
+|--------|-----------|-------------|-----------|
+| MySQL 8.0.27 | 3306 | **3308** | 3306=로컬 MySQL, 3307=로컬 MariaDB 11.x 충돌 |
+| Redis 7 | 6379 | 6379 | 충돌 없음 |
+
+### DB 스키마 동기화
+- `ddl-auto: none` 사용 중 → Hibernate가 스키마를 자동 생성/수정하지 않는다
+- 엔티티를 변경하면 반드시 수동으로 `ALTER TABLE` 실행 또는 `schema.sql` 적용
+- Docker 컨테이너를 **재생성**(`docker-compose down && up`)하면 볼륨이 유지되어도
+  이전 스키마 기반 테이블이 남을 수 있으니 엔티티와 테이블 구조를 비교한다
+- 확인 명령: `docker exec payment-mysql mysql -upayment -ppayment payment -e "DESCRIBE products;"`
+
+### Connector/J 버전 원칙
+- Spring Boot 4.x BOM이 관리하는 버전(현재 9.6.0)을 그대로 사용한다
+- 버전을 하드코딩하거나 8.x로 내리지 않는다 (HikariCP 7.x와 비호환)
+- JNA 의존성은 불필요 — 추가하지 않는다
+- `auth_gssapi_client` 오류가 나면 **Connector/J 문제가 아니라 포트 충돌**을 먼저 의심한다
+
+### 앱 실행 전
+```bash
+# 포트 8080 점유 확인
+cmd //c "netstat -ano | findstr :8080"
+# 이미 사용 중이면 이전 bootRun 프로세스를 먼저 종료
+cmd //c "taskkill /F /PID <PID번호>"
+```
+
 ## 개발 로그 (DEVLOG.md) 규칙
 
 모든 작업이 끝나면 반드시 `DEVLOG.md`를 업데이트한다.
