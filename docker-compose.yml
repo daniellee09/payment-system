@@ -11,8 +11,8 @@ services:
       MYSQL_USER: payment
       MYSQL_PASSWORD: payment
     ports:
-      # 로컬 MySQL(3306)과 충돌 방지를 위해 호스트 포트를 3307로 분리
-      - "3307:3306"
+      # 3306: 로컬 MySQL, 3307: 로컬 MariaDB 11.x와 충돌 → 3308로 분리
+      - "3308:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     # utf8mb4: 이모지 포함 한글 완전 지원 / unicode_ci: 대소문자 무시 정렬

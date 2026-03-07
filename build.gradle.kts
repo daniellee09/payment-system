@@ -38,10 +38,9 @@ dependencies {
 	// Redisson (Redis 분산 락 구현 — 4주차에 Spring Boot 4.x 호환 버전으로 추가 예정)
 	// implementation("org.redisson:redisson-spring-boot-starter:3.25.0")
 	// MySQL 드라이버 (런타임만 필요)
-	// Connector/J 9.x: auth_gssapi_client 버그 (MySQL Enterprise 플러그인 로드 실패)
-	// Connector/J 8.1.0+: MySQL 8.0.28+의 Server Hello 변경에 여전히 실패 (BadAuthenticationPlugin)
-	// Connector/J 8.0.33 + MySQL 8.0.27: 8.0.28 이전 — Server Hello 핸드쉐이크 변경 없는 마지막 안정 조합
-	runtimeOnly("com.mysql:mysql-connector-j:8.0.33")
+	// Spring Boot 4.x BOM 관리 버전(9.x)을 사용한다.
+	// 8.0.33은 HikariCP 7.x(Spring Boot 4.x 번들)와 호환 불가 — BadAuthenticationPlugin 에러 발생
+	runtimeOnly("com.mysql:mysql-connector-j")
 	// Spring Boot 통합 테스트 (JUnit 5 포함)
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	// MockK (Kotlin 친화적인 Mocking 프레임워크)

@@ -3,24 +3,17 @@ spring:
     name: payment
 
   datasource:
-    url: jdbc:mysql://localhost:3307/payment?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    # 3307은 호스트의 로컬 MariaDB 11.x와 충돌 → Docker MySQL은 3308 포트 사용
+    url: jdbc:mysql://localhost:3308/payment?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: payment
     password: payment
     driver-class-name: com.mysql.cj.jdbc.Driver
 
-  sql:
-    init:
-      # schema.sql을 애플리케이션 시작 시 자동 실행한다.
-      # 'always'로 설정해야 embedded가 아닌 외부 DB(MySQL)에서도 실행된다.
-      mode: always
-
   jpa:
-    # JPA 초기화 후 schema.sql을 실행하도록 DataSource 초기화를 지연시킨다.
-    # 이 설정이 없으면 schema.sql이 EntityManagerFactory 생성 전에 실행되어 실패할 수 있다.
-    defer-datasource-initialization: true
     hibernate:
       # none: Hibernate DDL 연결을 완전히 차단해 Connector/J auth_gssapi_client 버그를 우회한다.
-      # 테이블은 schema.sql로 직접 관리한다. (docker-compose down -v로 초기화)
+      # 테이블은 schema.sql을 docker exec로 직접 적용해 관리한다.
+      # (ddl-auto: create / sql.init.mode: always 모두 raw JDBC 연결을 열어 버그 재발)
       ddl-auto: none
     properties:
       hibernate:
