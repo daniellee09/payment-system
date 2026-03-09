@@ -65,6 +65,7 @@
       <button class="tab-btn active" data-tab="products">상품 관리</button>
       <button class="tab-btn" data-tab="orders">주문 생성</button>
       <button class="tab-btn" data-tab="payments">결제</button>
+      <button class="tab-btn" data-tab="order-history">주문 관리</button>
     </nav>
 
     <!-- ========================================
@@ -116,6 +117,7 @@
                   <th>가격</th>
                   <th>재고</th>
                   <th>등록일</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody id="products-tbody">
@@ -299,6 +301,47 @@
       <!-- 결제 결과 -->
       <div id="payment-result" class="card mt-24" style="display:none">
         <!-- 동적 렌더링 -->
+      </div>
+    </div>
+
+    <!-- ========================================
+         탭 4: 주문 관리
+         ======================================== -->
+    <div id="tab-order-history" class="tab-content">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <h2>주문 내역</h2>
+            <p>전체 주문을 조회하고 결제/취소할 수 있습니다.</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <select class="form-select" id="order-status-filter" style="width:auto">
+              <option value="ALL">전체</option>
+              <option value="CREATED">주문 생성</option>
+              <option value="PAID">결제 완료</option>
+              <option value="CANCELLED">취소됨</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" type="button" id="btn-refresh-orders">새로고침</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>주문번호</th>
+                <th>상품명</th>
+                <th>수량</th>
+                <th>총 금액</th>
+                <th>상태</th>
+                <th>주문일</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="order-history-tbody">
+              <!-- 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

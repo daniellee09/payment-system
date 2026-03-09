@@ -27,6 +27,12 @@ async function apiCall(method, path, body) {
 
   try {
     const response = await fetch(url, options);
+    // 204 No Content 등 빈 응답 처리
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      const successResponse = { success: true, data: null };
+      updateResponseViewer(successResponse, response.status);
+      return successResponse;
+    }
     const data = await response.json();
     // 마지막 API 응답을 응답 뷰어에 표시
     updateResponseViewer(data, response.status);
@@ -249,6 +255,7 @@ function switchTab(tabName) {
   if (tabName === 'products') loadProducts();
   if (tabName === 'orders') loadProductsForOrder();
   if (tabName === 'payments') { /* 결제 탭은 수동 입력 */ }
+  if (tabName === 'order-history') loadOrderHistory();
 }
 
 // ============================================
@@ -281,7 +288,7 @@ async function loadProducts() {
   const res = await apiCall('GET', '/products');
   if (!res.success) {
     tbody.innerHTML = `
-      <tr><td colspan="5">
+      <tr><td colspan="6">
         <div class="empty-state">
           <div class="empty-state-icon">!</div>
           <div class="empty-state-text">${res.error.message} (${res.error.code})</div>
@@ -293,7 +300,7 @@ async function loadProducts() {
   const products = res.data;
   if (!products || products.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="5">
+      <tr><td colspan="6">
         <div class="empty-state">
           <div class="empty-state-icon">&#128230;</div>
           <div class="empty-state-text">등록된 상품이 없습니다.<br>첫 번째 상품을 등록해보세요.</div>
@@ -305,12 +312,13 @@ async function loadProducts() {
   tbody.innerHTML = products
     .map(
       (p) => `
-      <tr class="selectable" onclick="showProductDetail('${p.productId}')">
-        <td class="cell-id" title="${p.productId}">${p.productId.substring(0, 8)}...</td>
-        <td>${escapeHtml(p.name)}</td>
-        <td class="cell-amount">${formatWon(p.price)}</td>
-        <td>${p.stock}개</td>
-        <td>${formatDateTime(p.createdAt)}</td>
+      <tr class="selectable">
+        <td class="cell-id" title="${p.productId}" onclick="showProductDetail('${p.productId}')">${p.productId.substring(0, 8)}...</td>
+        <td onclick="showProductDetail('${p.productId}')">${escapeHtml(p.name)}</td>
+        <td class="cell-amount" onclick="showProductDetail('${p.productId}')">${formatWon(p.price)}</td>
+        <td onclick="showProductDetail('${p.productId}')">${p.stock}개</td>
+        <td onclick="showProductDetail('${p.productId}')">${formatDateTime(p.createdAt)}</td>
+        <td><button class="btn btn-sm btn-danger" type="button" onclick="event.stopPropagation(); deleteProduct('${p.productId}', '${escapeHtml(p.name)}')">삭제</button></td>
       </tr>`
     )
     .join('');
@@ -382,6 +390,29 @@ async function createProduct(e) {
   } else {
     showToast(`등록 실패: ${res.error.message}`, 'error');
   }
+}
+
+// ============================================
+// 상품 삭제
+// ============================================
+
+function deleteProduct(productId, productName) {
+  showConfirmModal(
+    '상품을 삭제하시겠습니까?',
+    `"${productName}" 상품을 삭제합니다. 주문이 존재하는 상품은 삭제할 수 없습니다.`,
+    async () => {
+      const res = await apiCall('DELETE', `/products/${productId}`);
+      // DELETE 204 No Content는 빈 응답이므로 별도 처리
+      if (res === undefined || res === null || (res && res.success !== false)) {
+        showToast(`상품 "${productName}"이(가) 삭제되었습니다.`, 'success');
+        loadProducts();
+        // 상세 패널이 열려 있으면 숨김
+        document.getElementById('product-detail').style.display = 'none';
+      } else if (res && !res.success) {
+        showToast(`삭제 실패: ${res.error.message}`, 'error');
+      }
+    }
+  );
 }
 
 // ============================================
@@ -688,6 +719,91 @@ async function cancelPaymentFromForm(e) {
 }
 
 // ============================================
+// 주문 관리
+// ============================================
+
+let allOrders = [];
+
+async function loadOrderHistory() {
+  const tbody = document.getElementById('order-history-tbody');
+  tbody.innerHTML = renderSkeleton(5);
+
+  const res = await apiCall('GET', '/orders');
+  if (!res.success) {
+    tbody.innerHTML = `
+      <tr><td colspan="7">
+        <div class="empty-state">
+          <div class="empty-state-text">${res.error.message}</div>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  allOrders = res.data || [];
+  renderOrderHistory();
+}
+
+function renderOrderHistory() {
+  const tbody = document.getElementById('order-history-tbody');
+  const filter = document.getElementById('order-status-filter').value;
+  const orders = filter === 'ALL' ? allOrders : allOrders.filter(o => o.status === filter);
+
+  if (orders.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="7">
+        <div class="empty-state">
+          <div class="empty-state-icon">&#128203;</div>
+          <div class="empty-state-text">${filter === 'ALL' ? '주문 내역이 없습니다.' : `"${filter}" 상태의 주문이 없습니다.`}</div>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = orders.map(o => {
+    let actionHtml = '';
+    if (o.status === 'CREATED') {
+      actionHtml = `<button class="btn btn-sm btn-primary" type="button" onclick="payOrderFromHistory('${o.orderId}', ${o.totalAmount})">결제</button>`;
+    } else if (o.status === 'PAID' && o.paymentKey) {
+      actionHtml = `<button class="btn btn-sm btn-danger" type="button" onclick="cancelOrderFromHistory('${o.paymentKey}')">취소</button>`;
+    }
+    return `
+      <tr>
+        <td style="font-weight:700">${escapeHtml(o.orderNumber)}</td>
+        <td>${escapeHtml(o.productName)}</td>
+        <td>${o.quantity}개</td>
+        <td class="cell-amount">${formatWon(o.totalAmount)}</td>
+        <td>${renderBadge(o.status)}</td>
+        <td>${formatDateTime(o.createdAt)}</td>
+        <td>${actionHtml}</td>
+      </tr>`;
+  }).join('');
+}
+
+/** CREATED 상태 주문을 결제 탭으로 전달 */
+function payOrderFromHistory(orderId, totalAmount) {
+  copyToPaymentTab(orderId, totalAmount);
+}
+
+/** PAID 상태 주문을 취소한다. paymentKey를 사용해 결제를 취소한다. */
+function cancelOrderFromHistory(paymentKey) {
+  showConfirmModal(
+    '주문을 취소하시겠습니까?',
+    '결제가 취소되고 재고가 복원됩니다. 이 작업은 되돌릴 수 없습니다.',
+    async () => {
+      const res = await apiCall('POST', `/payments/${paymentKey}/cancel`, {
+        cancelReason: '관리자 취소',
+      });
+      if (res.success) {
+        showToast('주문이 취소되었습니다.', 'success');
+        loadOrderHistory();
+      } else {
+        showToast(`취소 실패: ${res.error.message}`, 'error');
+      }
+    }
+  );
+}
+
+// ============================================
 // 유틸리티
 // ============================================
 
@@ -749,6 +865,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 결제 취소 폼
   document.getElementById('cancel-form').addEventListener('submit', cancelPaymentFromForm);
+
+  // 주문 관리: 새로고침 버튼
+  document.getElementById('btn-refresh-orders').addEventListener('click', loadOrderHistory);
+
+  // 주문 관리: 상태 필터 변경
+  document.getElementById('order-status-filter').addEventListener('change', renderOrderHistory);
 
   // 멱등성 키 재생성 버튼
   document.getElementById('btn-regen-key').addEventListener('click', () => {

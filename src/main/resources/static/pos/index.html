@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS 결제 단말기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 토스트 알림 컨테이너 -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- 확인 모달 -->
+  <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3 id="modal-title">확인</h3>
+      <p id="modal-message">정말 실행하시겠습니까?</p>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button">취소</button>
+        <button class="modal-btn modal-btn-confirm" type="button">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 영수증 오버레이 -->
+  <div id="receipt-overlay" class="receipt-overlay hidden">
+    <div class="receipt" id="receipt-content">
+      <!-- 동적 렌더링 -->
+    </div>
+  </div>
+
+  <!-- 주문 이력 사이드 패널 -->
+  <div id="order-history-overlay" class="order-history-overlay hidden">
+    <div class="order-history-panel">
+      <div class="order-history-header">
+        <h2>주문 이력</h2>
+        <button class="btn-icon" id="btn-close-history" type="button" aria-label="닫기">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="order-history-list" id="order-history-list">
+        <!-- 동적 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 메인 레이아웃 -->
+  <div class="pos-layout">
+
+    <!-- ============================================
+         왼쪽 패널: 상품 목록
+         ============================================ -->
+    <section class="panel panel-products" aria-label="상품 목록">
+      <div class="panel-header">
+        <h1 class="panel-title">상품</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn-icon" id="btn-order-history" type="button" title="주문 이력" aria-label="주문 이력">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
+          <button class="btn-icon" id="btn-refresh-products" type="button" title="상품 목록 새로고침" aria-label="새로고침">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+            <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+          </svg>
+        </button>
+        </div>
+      </div>
+      <div class="products-grid" id="products-grid">
+        <!-- 동적 렌더링 -->
+      </div>
+    </section>
+
+    <!-- ============================================
+         중앙 패널: 장바구니 / 주문서
+         ============================================ -->
+    <section class="panel panel-cart" aria-label="주문서">
+      <div class="panel-header">
+        <h1 class="panel-title">주문서</h1>
+        <button class="btn-text-danger" id="btn-clear-cart" type="button">초기화</button>
+      </div>
+
+      <!-- 선택된 상품 -->
+      <div class="cart-body" id="cart-body">
+        <div class="cart-empty" id="cart-empty">
+          <div class="cart-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+            </svg>
+          </div>
+          <p>상품을 선택해주세요</p>
+        </div>
+
+        <!-- 선택된 상품 카드 (동적) -->
+        <div class="cart-item-wrapper hidden" id="cart-item-wrapper">
+          <div class="cart-item" id="cart-item">
+            <div class="cart-item-info">
+              <span class="cart-item-name" id="cart-item-name"></span>
+              <span class="cart-item-price" id="cart-item-unit-price"></span>
+            </div>
+            <div class="cart-item-qty">
+              <button class="qty-btn" id="btn-qty-minus" type="button" aria-label="수량 감소">-</button>
+              <span class="qty-value" id="cart-item-qty">1</span>
+              <button class="qty-btn" id="btn-qty-plus" type="button" aria-label="수량 증가">+</button>
+            </div>
+            <div class="cart-item-subtotal" id="cart-item-subtotal"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 합계 -->
+      <div class="cart-footer">
+        <div class="cart-total-row">
+          <span class="cart-total-label">합계</span>
+          <span class="cart-total-amount" id="cart-total-amount">0원</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================
+         오른쪽 패널: 결제
+         ============================================ -->
+    <section class="panel panel-payment" aria-label="결제">
+      <div class="panel-header">
+        <h1 class="panel-title">결제</h1>
+      </div>
+
+      <div class="payment-body">
+        <!-- 고객명 입력 -->
+        <div class="form-group">
+          <label class="form-label" for="customer-name">고객명</label>
+          <input class="form-input" type="text" id="customer-name"
+                 placeholder="고객명을 입력하세요" autocomplete="off">
+        </div>
+
+        <!-- 결제 수단 선택 -->
+        <div class="form-group">
+          <label class="form-label">결제 수단</label>
+          <div class="payment-methods" id="payment-methods" role="radiogroup" aria-label="결제 수단 선택">
+            <button class="method-btn active" data-method="CARD" type="button" role="radio" aria-checked="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+              <span>카드</span>
+            </button>
+            <button class="method-btn" data-method="TRANSFER" type="button" role="radio" aria-checked="false">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+              </svg>
+              <span>계좌이체</span>
+            </button>
+            <button class="method-btn" data-method="EASY_PAY" type="button" role="radio" aria-checked="false">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+              <span>간편결제</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 결제 정보 요약 -->
+        <div class="payment-summary" id="payment-summary">
+          <div class="summary-row">
+            <span>상품명</span>
+            <span id="summary-product">-</span>
+          </div>
+          <div class="summary-row">
+            <span>수량</span>
+            <span id="summary-qty">-</span>
+          </div>
+          <div class="summary-row">
+            <span>결제 수단</span>
+            <span id="summary-method">카드</span>
+          </div>
+          <div class="summary-row summary-row-total">
+            <span>결제 금액</span>
+            <span id="summary-total">0원</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 결제 버튼 -->
+      <div class="payment-footer">
+        <button class="btn-pay" id="btn-pay" type="button" disabled>
+          <span class="btn-pay-text">결제하기</span>
+          <span class="btn-pay-amount" id="btn-pay-amount">0원</span>
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

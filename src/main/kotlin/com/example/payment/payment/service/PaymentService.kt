@@ -1,5 +1,6 @@
 package com.example.payment.payment.service
 
+import com.example.payment.common.config.CacheConfig
 import com.example.payment.common.exception.AlreadyPaidException
 import com.example.payment.common.exception.OrderNotFoundException
 import com.example.payment.common.exception.PaymentAmountMismatchException
@@ -10,6 +11,8 @@ import com.example.payment.payment.dto.CancelPaymentRequest
 import com.example.payment.payment.dto.ConfirmPaymentRequest
 import com.example.payment.payment.dto.PaymentResponse
 import com.example.payment.payment.repository.PaymentRepository
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Caching
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -127,7 +130,15 @@ class PaymentService(
      * 이 세 가지(결제 취소 + 주문 취소 + 재고 복원)를 하나의 트랜잭션으로 묶는다.
      * 하나라도 실패하면 전체 롤백되어 데이터 불일치를 방지한다.
      */
+    /**
+     * 재고 복원 후 상품 캐시를 무효화한다.
+     * 취소로 재고가 증가하므로 캐시된 상품 정보를 제거해 최신 재고가 조회되도록 한다.
+     */
     @Transactional
+    @Caching(evict = [
+        CacheEvict(cacheNames = [CacheConfig.PRODUCT_LIST], allEntries = true),
+        CacheEvict(cacheNames = [CacheConfig.PRODUCT_DETAIL], allEntries = true),
+    ])
     fun cancelPayment(paymentKey: String, request: CancelPaymentRequest): PaymentResponse {
         val payment = paymentRepository.findByPaymentKey(paymentKey)
             ?: throw PaymentNotFoundException()

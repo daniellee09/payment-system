@@ -18,12 +18,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
-        # Hibernate 시작 시 JDBC 메타데이터 조회 연결을 생성하지 않도록 설정
-        # dialect와 ddl-auto를 명시했으므로 메타데이터 조회 없이도 정상 동작
-        # (과거 Connector/J 9.x auth_gssapi_client 버그 우회 목적으로 추가했으나,
-        #  현재는 불필요한 DB 커넥션을 줄이는 일반 최적화로 유지)
-        boot.allow_jdbc_metadata_access: false
+        # Hibernate 7.x는 JDBC 메타데이터에서 dialect를 자동 감지하므로 명시 불필요
+        # boot.allow_jdbc_metadata_access도 dialect 명시 없이는 의미가 없으므로 함께 제거
     # OSIV(Open Session in View) 비활성화 — 트랜잭션 범위 밖에서 쿼리 실행을 허용하지 않음
     # 실수로 Controller 레이어에서 Lazy Loading을 유발하는 것을 방지하기 위함
     open-in-view: false

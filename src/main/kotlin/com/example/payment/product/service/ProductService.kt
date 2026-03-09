@@ -1,13 +1,16 @@
 package com.example.payment.product.service
 
 import com.example.payment.common.config.CacheConfig
+import com.example.payment.common.exception.ProductHasOrdersException
 import com.example.payment.common.exception.ProductNotFoundException
+import com.example.payment.order.repository.OrderRepository
 import com.example.payment.product.domain.Product
 import com.example.payment.product.dto.CreateProductRequest
 import com.example.payment.product.dto.ProductResponse
 import com.example.payment.product.repository.ProductRepository
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.cache.annotation.Caching
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional
 @Transactional(readOnly = true)
 class ProductService(
     private val productRepository: ProductRepository,
+    private val orderRepository: OrderRepository,
 ) {
     /**
      * 상품 등록 후 목록 캐시를 무효화한다.
@@ -64,5 +68,27 @@ class ProductService(
         val product = productRepository.findByProductId(productId)
             ?: throw ProductNotFoundException()
         return ProductResponse.from(product)
+    }
+
+    /**
+     * 상품을 삭제한다.
+     *
+     * 주문이 존재하는 상품은 FK 제약조건 위반을 방지하기 위해 삭제를 거부한다.
+     * DB의 FK 에러에 의존하지 않고 비즈니스 레벨에서 먼저 검증해 명확한 에러 메시지를 제공한다.
+     */
+    @Transactional
+    @Caching(evict = [
+        CacheEvict(cacheNames = [CacheConfig.PRODUCT_LIST], allEntries = true),
+        CacheEvict(cacheNames = [CacheConfig.PRODUCT_DETAIL], key = "#productId"),
+    ])
+    fun deleteProduct(productId: String) {
+        val product = productRepository.findByProductId(productId)
+            ?: throw ProductNotFoundException()
+
+        if (orderRepository.existsByProduct(product)) {
+            throw ProductHasOrdersException()
+        }
+
+        productRepository.delete(product)
     }
 }

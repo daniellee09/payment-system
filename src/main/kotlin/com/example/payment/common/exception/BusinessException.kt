@@ -17,6 +17,8 @@ abstract class BusinessException(
 
 class ProductNotFoundException : BusinessException(ErrorCode.PRODUCT_NOT_FOUND)
 
+class ProductHasOrdersException : BusinessException(ErrorCode.PRODUCT_HAS_ORDERS)
+
 /**
  * 현재 재고 수량을 메시지에 포함해 클라이언트가 상황을 파악할 수 있게 한다.
  */

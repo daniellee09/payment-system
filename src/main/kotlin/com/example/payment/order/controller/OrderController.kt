@@ -27,6 +27,10 @@ class OrderController(
     fun createOrder(@Valid @RequestBody request: CreateOrderRequest): ApiResponse<OrderResponse> =
         ApiResponse.success(orderService.createOrder(request))
 
+    @GetMapping
+    fun getOrders(): ApiResponse<List<OrderResponse>> =
+        ApiResponse.success(orderService.getOrders())
+
     @GetMapping("/{orderId}")
     fun getOrder(@PathVariable orderId: String): ApiResponse<OrderResponse> =
         ApiResponse.success(orderService.getOrder(orderId))

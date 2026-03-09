@@ -1,10 +1,23 @@
 package com.example.payment.order.repository
 
 import com.example.payment.order.domain.Order
+import com.example.payment.product.domain.Product
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
 
 interface OrderRepository : JpaRepository<Order, Long> {
+    // 상품 삭제 전 해당 상품으로 생성된 주문이 있는지 확인한다.
+    fun existsByProduct(product: Product): Boolean
+
+    /**
+     * 전체 주문을 최신순으로 조회한다.
+     * product를 함께 로딩해 N+1 쿼리를 방지한다.
+     */
+    @EntityGraph(attributePaths = ["product"])
+    @Query("SELECT o FROM Order o ORDER BY o.createdAt DESC")
+    fun findAllWithProduct(): List<Order>
+
     /**
      * 외부 노출용 orderId(UUID)로 주문을 조회한다.
      *

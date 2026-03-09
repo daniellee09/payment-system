@@ -14,11 +14,13 @@ enum class ErrorCode(val status: HttpStatus, val message: String) {
     PAYMENT_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "주문 금액과 결제 금액이 일치하지 않습니다."),
 
     // 404 Not Found
+    NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제를 찾을 수 없습니다."),
 
     // 409 Conflict
+    PRODUCT_HAS_ORDERS(HttpStatus.CONFLICT, "주문이 존재하는 상품은 삭제할 수 없습니다."),
     OUT_OF_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
     ALREADY_PAID(HttpStatus.CONFLICT, "이미 결제된 주문입니다."),
     INVALID_ORDER_STATUS(HttpStatus.CONFLICT, "현재 주문 상태에서는 해당 작업을 수행할 수 없습니다."),

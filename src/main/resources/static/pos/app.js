@@ -162,6 +162,7 @@ const state = {
   selectedMethod: 'CARD',
   isProcessing: false,
   lastPayment: null, // 마지막 결제 결과 (영수증 표시용)
+  sessionOrders: [], // 이 세션에서 생성한 주문 (order + payment 정보)
 };
 
 // ============================================
@@ -446,6 +447,13 @@ async function processPayment() {
     const payment = paymentRes.data;
     state.lastPayment = payment;
 
+    // 세션 주문 이력에 추가 (최신순으로 맨 앞에)
+    state.sessionOrders.unshift({
+      order,
+      payment,
+      cancelledAt: null,
+    });
+
     showToast('결제가 완료되었습니다.', 'success');
     showReceipt(payment, order);
 
@@ -576,11 +584,98 @@ async function executeCancelPayment(paymentKey, order) {
 
   if (res.success) {
     showToast('결제가 취소되었습니다.', 'info');
+    // 세션 주문 이력에서 해당 주문의 결제 상태를 업데이트
+    const sessionEntry = state.sessionOrders.find(e => e.payment.paymentKey === paymentKey);
+    if (sessionEntry) {
+      sessionEntry.payment = res.data;
+      sessionEntry.cancelledAt = new Date().toISOString();
+    }
     showReceipt(res.data, order);
     loadProducts(); // 재고 복원 반영
   } else {
     showToast(`취소 실패: ${res.error.message}`, 'error');
   }
+}
+
+// ============================================
+// 주문 이력 패널
+// ============================================
+
+function openOrderHistory() {
+  renderOrderHistory();
+  document.getElementById('order-history-overlay').classList.remove('hidden');
+}
+
+function closeOrderHistory() {
+  document.getElementById('order-history-overlay').classList.add('hidden');
+}
+
+function renderOrderHistory() {
+  const list = document.getElementById('order-history-list');
+
+  if (state.sessionOrders.length === 0) {
+    list.innerHTML = `
+      <div class="order-history-empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        <p>이 세션에서 처리한 주문이 없습니다.</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = state.sessionOrders.map((entry, idx) => {
+    const { order, payment } = entry;
+    const isCancelled = payment.status === 'CANCELLED';
+    const statusClass = isCancelled ? 'cancelled' : 'done';
+    const statusLabel = isCancelled ? '취소됨' : '결제 완료';
+    const methodLabel = PAYMENT_METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod;
+    const dateStr = order.createdAt
+      ? new Date(order.createdAt).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    return `
+      <div class="order-history-item ${isCancelled ? 'cancelled' : ''}">
+        <div class="order-history-item-header">
+          <span class="order-history-number">#${escapeHtml(order.orderNumber)}</span>
+          <span class="order-history-badge ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="order-history-item-body">
+          <div class="order-history-row">
+            <span>${escapeHtml(order.productName)}</span>
+            <span>${order.quantity}개</span>
+          </div>
+          <div class="order-history-row">
+            <span>${methodLabel}</span>
+            <span class="order-history-amount">${formatWon(payment.amount)}</span>
+          </div>
+          <div class="order-history-row muted">
+            <span>${escapeHtml(order.customerName || '')}</span>
+            <span>${dateStr}</span>
+          </div>
+        </div>
+        ${!isCancelled ? `
+        <div class="order-history-item-actions">
+          <button class="order-history-cancel-btn" type="button" data-idx="${idx}">
+            주문 취소
+          </button>
+        </div>` : `
+        <div class="order-history-item-actions">
+          <span class="order-history-cancelled-label">취소 완료</span>
+        </div>`}
+      </div>`;
+  }).join('');
+
+  // 취소 버튼 이벤트 바인딩
+  list.querySelectorAll('.order-history-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      const entry = state.sessionOrders[idx];
+      closeOrderHistory();
+      promptCancelPayment(entry.payment.paymentKey, entry.order);
+    });
+  });
 }
 
 // ============================================
@@ -611,6 +706,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 결제 버튼
   document.getElementById('btn-pay').addEventListener('click', processPayment);
+
+  // 주문 이력 패널
+  document.getElementById('btn-order-history').addEventListener('click', openOrderHistory);
+  document.getElementById('btn-close-history').addEventListener('click', closeOrderHistory);
+  document.getElementById('order-history-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'order-history-overlay') closeOrderHistory();
+  });
 
   // 초기 결제 수단 요약 표시
   document.getElementById('summary-method').textContent =

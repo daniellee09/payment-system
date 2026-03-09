@@ -6,6 +6,7 @@ import com.example.payment.product.dto.ProductResponse
 import com.example.payment.product.service.ProductService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -35,4 +36,10 @@ class ProductController(
     @GetMapping("/{productId}")
     fun getProduct(@PathVariable productId: String): ApiResponse<ProductResponse> =
         ApiResponse.success(productService.getProduct(productId))
+
+    @DeleteMapping("/{productId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteProduct(@PathVariable productId: String) {
+        productService.deleteProduct(productId)
+    }
 }

@@ -1001,6 +1001,169 @@ body {
 }
 
 /* ============================================
+   주문 이력 패널
+   ============================================ */
+.order-history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.order-history-panel {
+  width: 400px;
+  max-width: 90vw;
+  background: var(--bg-panel);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+  animation: slideIn 0.25s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.order-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.order-history-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.order-history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.order-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-size: 14px;
+}
+
+.order-history-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.order-history-item:not(.cancelled):hover {
+  border-color: var(--border-light);
+}
+
+.order-history-item.cancelled {
+  opacity: 0.55;
+}
+
+.order-history-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 0;
+}
+
+.order-history-number {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+}
+
+.order-history-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.order-history-badge.done {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.order-history-badge.cancelled {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.order-history-item-body {
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-history-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.order-history-row.muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.order-history-amount {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.order-history-item-actions {
+  padding: 8px 16px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.order-history-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.15s;
+}
+
+.order-history-cancel-btn:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+.order-history-cancelled-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ============================================
    유틸리티
    ============================================ */
 .hidden {

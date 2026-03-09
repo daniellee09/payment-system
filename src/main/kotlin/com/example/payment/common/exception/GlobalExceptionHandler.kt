@@ -3,11 +3,13 @@ package com.example.payment.common.exception
 import com.example.payment.common.response.ApiResponse
 import com.example.payment.common.response.ErrorResponse
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
  * 애플리케이션 전역 예외 처리기.
@@ -56,6 +58,18 @@ class GlobalExceptionHandler {
         return ResponseEntity
             .status(ErrorCode.INVALID_REQUEST.status)
             .body(ApiResponse.error(ErrorResponse(code = ErrorCode.INVALID_REQUEST.name, message = message)))
+    }
+
+    /**
+     * 정적 리소스 없음(404): 브라우저가 /favicon.ico 등을 자동 요청할 때 INTERNAL_ERROR로 오해되지 않도록 분리한다.
+     * @RestControllerAdvice가 Spring MVC 내부 예외도 가로채기 때문에 명시적으로 처리해야 한다.
+     */
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResourceFound(e: NoResourceFoundException): ResponseEntity<ApiResponse<Nothing>> {
+        val errorCode = ErrorCode.NOT_FOUND
+        return ResponseEntity
+            .status(errorCode.status)
+            .body(ApiResponse.error(ErrorResponse(code = errorCode.name, message = e.message ?: errorCode.message)))
     }
 
     /**
