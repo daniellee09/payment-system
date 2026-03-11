@@ -475,3 +475,210 @@ every { distributedLockManager.withLock(any<String>(), any<() -> Any>()) } answe
 ```
 
 ---
+
+## [5주차] 기능 확장 + 버그 수정 + 운영 개선 — 2026-03-09
+
+> **목표**: 4주차까지 구현된 핵심 API에 누락된 기능을 채우고, 운영 시 발견되는 버그들을 수정한다. 또한 프론트엔드를 Spring Boot 정적 자원으로 통합해 별도 서버 없이 서비스한다.
+
+---
+
+### ▶ 상품 삭제 API 추가 — `DELETE /api/v1/products/{productId}`
+
+**왜 이 작업을 했나**: 상품 등록/조회만 있고 삭제가 없어서 테스트 데이터를 정리할 수 없었다. 실제 서비스에서도 판매 중단 상품을 제거할 수 있어야 한다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `product/controller/ProductController.kt` | `DELETE /{productId}` 엔드포인트 추가. 응답은 204 No Content |
+| `product/service/ProductService.kt` | `deleteProduct()` 구현. 주문이 존재하는 상품은 삭제 불가 |
+| `product/repository/OrderRepository.kt` | `existsByProduct(product): Boolean` 추가 |
+| `common/exception/ErrorCode.kt` | `PRODUCT_HAS_ORDERS(409)` 추가 |
+| `common/exception/BusinessException.kt` | `ProductHasOrdersException` 추가 |
+
+**핵심 결정: 주문이 있는 상품은 삭제 금지**
+
+주문 내역에 `product_id` FK가 걸려 있으므로 DB에서도 DELETE가 실패하지만, 그 전에 애플리케이션 레벨에서 먼저 검증해 명확한 에러 메시지를 돌려준다.
+
+```kotlin
+@Transactional
+@Caching(evict = [
+    CacheEvict(cacheNames = [CacheConfig.PRODUCT_LIST], allEntries = true),
+    CacheEvict(cacheNames = [CacheConfig.PRODUCT_DETAIL], key = "#productId"),
+])
+fun deleteProduct(productId: String) {
+    val product = productRepository.findByProductId(productId)
+        ?: throw ProductNotFoundException()
+    // 주문 내역이 있으면 삭제 불가 — 주문 이력과 FK 정합성 보호
+    if (orderRepository.existsByProduct(product)) {
+        throw ProductHasOrdersException()
+    }
+    productRepository.delete(product)
+}
+```
+
+캐시도 두 개 모두 evict한다. 삭제 후에도 캐시에서 상품이 조회되면 안 된다.
+
+---
+
+### ▶ 주문 목록 조회 API 추가 — `GET /api/v1/orders`
+
+**왜 이 작업을 했나**: 주문 생성과 단건 조회만 있었다. 대시보드에서 전체 주문 목록을 보여주려면 목록 조회 API가 필요했다. POS에서도 당일 주문 내역을 확인해야 한다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `order/controller/OrderController.kt` | `GET /api/v1/orders` 엔드포인트 추가 |
+| `order/service/OrderService.kt` | `getOrders()` 구현. 결제 키 포함 |
+| `order/repository/OrderRepository.kt` | `findAllWithProduct()` 추가 — @EntityGraph + DESC 정렬 |
+| `order/dto/OrderResponse.kt` | `paymentKey: String?` 필드 추가 |
+| `payment/repository/PaymentRepository.kt` | `findByOrderId(orderId: Long)` 추가 |
+
+**핵심 결정: 주문 응답에 paymentKey 포함**
+
+주문 목록에서 결제를 바로 취소할 수 있도록 `paymentKey`를 함께 반환한다. 클라이언트가 결제 취소를 하려면 `paymentKey`가 필요한데, 주문 목록 조회 후 별도로 결제를 조회하는 번거로움을 없앴다.
+
+```kotlin
+fun getOrders(): List<OrderResponse> {
+    val orders = orderRepository.findAllWithProduct()
+    return orders.map { order ->
+        // 주문마다 결제 키를 함께 조회해 응답에 포함
+        val payment = paymentRepository.findByOrderId(requireNotNull(order.id))
+        OrderResponse.from(order, paymentKey = payment?.paymentKey)
+    }
+}
+```
+
+---
+
+### ▶ N+1 쿼리 버그 수정 — PaymentRepository @EntityGraph 추가
+
+**왜 이 작업을 했나**: `cancelPayment()`에서 `payment.order.product.increaseStock()`을 호출할 때 LAZY 관계를 세 단계 거친다(Payment → Order → Product). 각 단계마다 SELECT 쿼리가 추가로 발생했다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `payment/repository/PaymentRepository.kt` | `findByPaymentKey`에 `@EntityGraph(attributePaths = ["order", "order.product"])` 추가 |
+| `payment/repository/PaymentRepository.kt` | `findByIdempotencyKey`에 `@EntityGraph(attributePaths = ["order"])` 추가 |
+
+**수정 전 SQL (3번)**:
+```sql
+SELECT * FROM payments WHERE payment_key = ?;
+SELECT * FROM orders WHERE id = ?;       -- payment.order 접근 시
+SELECT * FROM products WHERE id = ?;    -- order.product 접근 시
+```
+
+**수정 후 SQL (1번)**:
+```sql
+SELECT p.*, o.*, pr.*
+FROM payments p
+LEFT JOIN orders o ON p.order_id = o.id
+LEFT JOIN products pr ON o.product_id = pr.id
+WHERE p.payment_key = ?;
+```
+
+`findByIdempotencyKey`는 멱등성 검증에서 `existingPayment.order.orderId`만 접근하므로 Order까지만 JOIN한다.
+
+---
+
+### ▶ Redis 캐시 무효화 버그 수정
+
+**왜 이 작업을 했나**: 주문 생성(재고 차감)과 결제 취소(재고 복원) 이후에도 상품 캐시가 갱신되지 않았다. 캐시된 데이터에는 이전 재고 수량이 남아 있었다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `order/service/OrderService.kt` | `createOrder()`에 `@Caching(evict = [PRODUCT_LIST, PRODUCT_DETAIL])` 추가 |
+| `payment/service/PaymentService.kt` | `cancelPayment()`에 `@Caching(evict = [PRODUCT_LIST, PRODUCT_DETAIL])` 추가 |
+
+**왜 둘 다 evict해야 하나**: 상품 목록(`PRODUCT_LIST`)에는 재고가 포함되어 있고, 상품 상세(`PRODUCT_DETAIL`)에도 재고가 있다. 재고가 바뀌었다면 두 캐시 모두 낡은 데이터다. `allEntries = true`로 전체를 비운다.
+
+---
+
+### ▶ ErrorCode 하드코딩 버그 수정
+
+**왜 이 작업을 했나**: `GlobalExceptionHandler`에서 `NoResourceFoundException`을 처리할 때 에러 코드를 `"NOT_FOUND"` 문자열로 하드코딩하고 있었다. `ErrorCode.NOT_FOUND.name`으로 참조해야 일관성이 유지되고, 나중에 코드명이 바뀌어도 자동으로 반영된다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `common/exception/GlobalExceptionHandler.kt` | `"NOT_FOUND"` 리터럴 → `ErrorCode.NOT_FOUND.name` |
+
+---
+
+### ▶ Hibernate 7.x 호환 설정 수정
+
+**왜 이 작업을 했나**: `application.yml`에 남아 있던 `hibernate.dialect` 설정이 Hibernate 7.x(Spring Boot 4.x)에서 deprecated 경고를 발생시켰다. Hibernate 7.x는 Dialect를 자동으로 감지하므로 수동 지정이 불필요하다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `src/main/resources/application.yml` | `hibernate.dialect: org.hibernate.dialect.MySQLDialect` 설정 제거 |
+
+---
+
+### ▶ JPA/Redis 스캐닝 충돌 경고 수정
+
+**왜 이 작업을 했나**: Redis 설정과 JPA 설정이 같은 컨텍스트에서 로드될 때 "Redis Repository와 JPA Repository를 같이 스캔하면서 충돌 가능성" 경고가 발생했다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `common/config/JpaConfig.kt` | `@EnableJpaRepositories(basePackages = ["com.example.payment"])` 추가. JPA가 스캔할 패키지를 명시해 Redis Repository와 충돌을 방지한다 |
+
+---
+
+### ▶ 프론트엔드 Spring Boot 정적 자원 통합
+
+**왜 이 작업을 했나**: 기존에는 `frontend/`, `frontend-pos/` 폴더를 브라우저에서 직접 열거나 별도 Live Server로 실행했다. Spring Boot에 정적 자원으로 포함하면 앱 실행 하나로 백엔드와 프론트엔드를 모두 서비스할 수 있다.
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `src/main/resources/static/` | 정적 자원 루트. Spring Boot가 `/` URL로 자동 서빙 |
+| `static/index.html` | 랜딩 페이지. 서비스 상태, API 문서 링크, 대시보드/POS 이동 버튼 |
+| `static/dashboard/` | 기존 `frontend/`를 이동. `index.html`, `style.css`, `app.js` |
+| `static/pos/` | 기존 `frontend-pos/`를 이동 |
+| `common/config/WebConfig.kt` | `/dashboard/`, `/pos/` 접근 시 각 `index.html`로 forward 설정 추가 |
+
+**핵심 결정: View Controller로 SPA 라우팅**
+
+```kotlin
+override fun addViewControllers(registry: ViewControllerRegistry) {
+    registry.addViewController("/dashboard/").setViewName("forward:/dashboard/index.html")
+    registry.addViewController("/pos/").setViewName("forward:/pos/index.html")
+}
+```
+
+Spring Boot는 `src/main/resources/static/`의 파일을 자동으로 서빙하지만 디렉토리 접근(`/dashboard/`)은 자동으로 `index.html`로 forward하지 않는다. View Controller에서 명시적으로 설정해야 한다.
+
+**최종 URL 구조**:
+```
+http://localhost:8080/           → 랜딩 페이지
+http://localhost:8080/dashboard/ → 개발자 대시보드
+http://localhost:8080/pos/       → POS 결제 단말기
+http://localhost:8080/api/v1/... → REST API
+```
+
+---
+
+### ▶ 랜딩 페이지 구현 (`static/index.html`)
+
+**왜 만들었나**: 프론트엔드가 두 개(`dashboard`, `pos`)가 되면서 진입점이 필요했다. 처음 접속한 사람이 어디로 가야 할지 알 수 있어야 한다. 또한 구현된 API 목록과 기술 스택을 한눈에 볼 수 있는 페이지가 있으면 포트폴리오 용도로도 유용하다.
+
+**포함 내용**:
+- 서비스 상태 카드 (API 서버, DB, Redis 연결 상태)
+- 구현된 API 엔드포인트 목록 (메서드, URL, 설명)
+- 기술 스택 뱃지
+- 대시보드/POS 이동 버튼
+
+---
+
+### ▶ 빌드 검증
+
+```
+./gradlew test → BUILD SUCCESSFUL
+단위 테스트 17개 전부 통과
+```
+
+**5주차에서 수정된 핵심 버그 요약**:
+
+| 버그 | 증상 | 원인 | 해결 |
+|------|------|------|------|
+| 캐시 미무효화 | 재고 변경 후에도 캐시된 재고 수량 반환 | createOrder/cancelPayment에 @CacheEvict 누락 | 두 메서드에 @Caching(evict) 추가 |
+| N+1 쿼리 | 결제 취소 1번에 SELECT 3번 발생 | PaymentRepository @EntityGraph 미적용 | order, order.product EntityGraph 추가 |
+| 에러코드 하드코딩 | NOT_FOUND 문자열 직접 사용 | 리팩토링 시 enum 반영 누락 | ErrorCode.NOT_FOUND.name으로 변경 |
+| Hibernate 경고 | deprecated dialect 설정 경고 로그 | Hibernate 7.x 자동 감지 방식 변경 | 수동 dialect 설정 제거 |
+
+---
