@@ -2,6 +2,7 @@ package com.example.payment.product.service
 
 import com.example.payment.common.TestFixtures.createProduct
 import com.example.payment.common.exception.ProductNotFoundException
+import com.example.payment.order.repository.OrderRepository
 import com.example.payment.product.domain.Product
 import com.example.payment.product.dto.CreateProductRequest
 import com.example.payment.product.repository.ProductRepository
@@ -20,12 +21,14 @@ import java.math.BigDecimal
 class ProductServiceTest {
 
     private lateinit var productRepository: ProductRepository
+    private lateinit var orderRepository: OrderRepository
     private lateinit var productService: ProductService
 
     @BeforeEach
     fun setUp() {
         productRepository = mockk()
-        productService = ProductService(productRepository)
+        orderRepository = mockk()
+        productService = ProductService(productRepository, orderRepository)
     }
 
     @Test

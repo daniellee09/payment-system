@@ -11,6 +11,7 @@ import com.example.payment.order.domain.Order
 import com.example.payment.order.domain.OrderStatus
 import com.example.payment.order.dto.CreateOrderRequest
 import com.example.payment.order.repository.OrderRepository
+import com.example.payment.payment.repository.PaymentRepository
 import com.example.payment.product.repository.ProductRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -29,6 +30,7 @@ class OrderServiceTest {
 
     private lateinit var orderRepository: OrderRepository
     private lateinit var productRepository: ProductRepository
+    private lateinit var paymentRepository: PaymentRepository
     private lateinit var distributedLockManager: DistributedLockManager
     private lateinit var orderService: OrderService
 
@@ -36,6 +38,7 @@ class OrderServiceTest {
     fun setUp() {
         orderRepository = mockk()
         productRepository = mockk()
+        paymentRepository = mockk()
         distributedLockManager = mockk()
 
         // 단위 테스트에서는 실제 Redis 락 없이 block을 그대로 실행한다.
@@ -46,7 +49,7 @@ class OrderServiceTest {
             (args[1] as () -> Any).invoke()
         }
 
-        orderService = OrderService(orderRepository, productRepository, distributedLockManager)
+        orderService = OrderService(orderRepository, productRepository, paymentRepository, distributedLockManager)
     }
 
     @Test
